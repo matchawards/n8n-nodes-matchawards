@@ -1,0 +1,42 @@
+{
+  "name": "Daily MatchAwards contracts to Slack",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "triggerAtHour": 8 }] } },
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "resource": "contract",
+        "operation": "search",
+        "naics": "541511",
+        "limit": 50,
+        "filters": { "postedWithinDays": 1 }
+      },
+      "name": "New contracts for 541511",
+      "type": "n8n-nodes-matchawards.matchAwards",
+      "typeVersion": 1,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "#contracts", "mode": "name" },
+        "text": "={{ $json.title }} ({{ $json.agency }}), due {{ $json.response_deadline }}\n{{ $json.url }}",
+        "otherOptions": {}
+      },
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [440, 0]
+    }
+  ],
+  "connections": {
+    "Every morning": { "main": [[{ "node": "New contracts for 541511", "type": "main", "index": 0 }]] },
+    "New contracts for 541511": { "main": [[{ "node": "Post to Slack", "type": "main", "index": 0 }]] }
+  },
+  "settings": {}
+}
