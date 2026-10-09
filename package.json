@@ -10,10 +10,11 @@
     "naics"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/matchawards/n8n-nodes-matchawards",
   "author": {
-    "name": "MatchAwards"
+    "name": "MatchAwards",
+    "email": "cmo@ait.com"
   },
+  "homepage": "https://github.com/matchawards/n8n-nodes-matchawards",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/matchawards/n8n-nodes-matchawards.git"
