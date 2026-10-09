@@ -15,6 +15,10 @@ node then shows up in the node panel. It can also be used as a tool by an n8n AI
 
 Self-hosted without the UI: `cd ~/.n8n/nodes && npm install n8n-nodes-matchawards`, then restart n8n.
 
+## Credentials
+
+None. The public MatchAwards API needs no account and no API key.
+
 ## Resources and operations
 
 | Resource | Operation | Fields | Covers MCP tool |
@@ -63,6 +67,21 @@ credentials and channel.
 
 The API allows 60 requests per minute and 20 per 5 seconds per IP address. One search makes 1 to 3 requests.
 On HTTP 429 the node tells you how many seconds to wait.
+
+## Compatibility
+
+Tested with n8n 2.42.6 (self-hosted, Node.js 24). No runtime dependencies.
+
+## Resources
+
+- [MatchAwards](https://matchawards.com)
+- [MatchAwards public API](https://matchawards.com/api/public/v1/) (a JSON description of the endpoints and parameters)
+- [MatchAwards MCP server](https://github.com/matchawards/matchawards-mcp), the same search for AI agents
+- [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
+
+## Version history
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
