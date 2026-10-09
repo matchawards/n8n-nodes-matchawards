@@ -29,7 +29,7 @@ node then shows up in the node panel. It can also be used as a tool by an n8n AI
 - **Get** returns the full record: the search row plus `description` (up to 2000 characters) and
   `contacts` (`[{name, title}]`, empty when none are published). That covers both `get_opportunity` and
   `find_contacts`. Get works the same under every resource; the id decides the record.
-- **Limit** is 1 to 50 (default 20). When a filter is sparse, a search follows the API cursor for up to
+- **Limit** is 1 to 50 (default 50). When a filter is sparse, a search follows the API cursor for up to
   3 requests to fill it, dropping duplicates.
 - **Include Closed** off (the default) keeps only items whose response deadline is today or later (US Eastern);
   an item with no deadline counts as closed.
@@ -42,15 +42,13 @@ node then shows up in the node panel. It can also be used as a tool by an n8n AI
   node must run anyway.
 - **Options → Include Paging Info** emits a single item `{as_of, results, has_more, next_cursor}` instead. Pass
   `next_cursor` as the **Cursor** filter, with the same filters, to get the next page. If a follow-up page fails,
-  the rows collected so far are kept and a `warning` says so (shown as an execution hint when paging info is off).
+  the rows collected so far are kept and a `warning` says so. A `warning` also appears when the 3 requests ran out
+  before Limit was filled. With paging info off, the warning is shown as an execution hint.
 - **Get** emits one item with the record and `as_of`.
 - `id` is always a string. It is longer than a JavaScript number can hold exactly, so never convert it.
 
 Errors carry the API's advice (rate limit with the wait time, grants unavailable, bad parameter, not found). With
 *Continue On Fail* on, a failing input item yields `{error}` and the others still run.
-
-**Options → API Base URL** points the node at another host (e.g. `https://staging.matchawards.com`); leave it at
-`https://matchawards.com` otherwise.
 
 ## Example workflow
 
@@ -67,11 +65,18 @@ On HTTP 429 the node tells you how many seconds to wait.
 ## Development
 
 ```bash
-npm install
-npm run build   # tsc to dist/, copies the icon
-npm test        # node:test against a mocked API, no network
-npm run smoke   # one search + one get against https://staging.matchawards.com
+npm ci          # on Node 26+: npm ci --ignore-scripts (isolated-vm, a dev-only dependency, has no build there)
+npm run lint    # n8n-node lint, the same rules as the n8n Creator Portal scan
+npm test        # n8n-node build, then node:test against a mocked API, no network
+npm run smoke   # one search + one get against https://staging.matchawards.com (MATCHAWARDS_API_BASE overrides)
 ```
+
+## Releasing
+
+n8n verifies only community nodes published from GitHub Actions with npm provenance, so this package is never
+published from a laptop (`npm publish` refuses unless run by `npm run release`). `npm run release` on `main` lints,
+builds, bumps the version, tags and pushes; the tag runs `.github/workflows/publish.yml`, which publishes with
+provenance. Update `CHANGELOG.md` and the operations table above in the same change as any new operation.
 
 ## License
 

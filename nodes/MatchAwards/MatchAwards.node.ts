@@ -17,7 +17,7 @@ import { version } from '../../package.json';
 // matchawards-mcp server (src/matchawards_mcp/server.py): same API, same paging, same messages.
 
 const USER_AGENT = `n8n-nodes-matchawards/${version} (+https://github.com/matchawards/n8n-nodes-matchawards)`;
-const DEFAULT_BASE = 'https://matchawards.com';
+const BASE = 'https://matchawards.com';
 const SEARCH_PATH = '/api/public/v1/opportunities';
 const TIMEOUT_MS = 10_000; // the API answers within about 2 s by design
 const MAX_PAGES = 3; // API requests one search may make while filling Limit
@@ -91,7 +91,7 @@ const f = {
 		type: 'string',
 		default: '',
 		description:
-			'next_cursor from the previous response (turn on Include Paging Info to see it). Pass it with the same filters to get the next page.',
+			'The next_cursor of the previous response (turn on Include Paging Info to see it). Pass it with the same filters to get the next page.',
 	},
 } satisfies Record<string, INodeProperties>;
 
@@ -112,7 +112,7 @@ const operation = (resource: Resource, plural: string, what: string): INodePrope
 			name: 'Get',
 			value: 'get',
 			description:
-				'Get the full record of one opportunity by its id from a search result: the search row plus description (up to 2000 characters) and contacts [{name, title}]',
+				'Get the full record of one opportunity by its ID from a search result: the search row plus description (up to 2000 characters) and contacts [{name, title}]',
 			action: `Get a ${resource}`,
 		},
 	],
@@ -156,7 +156,7 @@ const properties: INodeProperties[] = [
 		required: true,
 		default: '',
 		displayOptions: { show: { operation: ['get'] } },
-		description: 'The id field of a search result',
+		description: 'The ID field of a search result',
 	},
 	{
 		displayName: 'NAICS',
@@ -184,10 +184,10 @@ const properties: INodeProperties[] = [
 		displayName: 'Limit',
 		name: 'limit',
 		type: 'number',
-		default: 20,
+		default: 50,
 		typeOptions: { minValue: 1, maxValue: 50 },
 		displayOptions: { show: { operation: ['search'] } },
-		description: 'Max number of results to return, 1 to 50',
+		description: 'Max number of results to return',
 	},
 	filters('contract', [f.state, f.keyword, f.setAside, f.postedWithinDays, f.includeClosed, f.cursor]),
 	filters('grant', [
@@ -216,13 +216,6 @@ const properties: INodeProperties[] = [
 				displayOptions: { show: { '/operation': ['search'] } },
 				description:
 					'Whether to output one item {as_of, results, has_more, next_cursor} instead of one item per result',
-			},
-			{
-				displayName: 'API Base URL',
-				name: 'apiBaseUrl',
-				type: 'string',
-				default: DEFAULT_BASE,
-				description: 'Override for testing, e.g. https://staging.matchawards.com',
 			},
 		],
 	},
@@ -258,7 +251,7 @@ function errorMessage(r: IN8nHttpFullResponse): string {
 }
 
 /** GET one API path; turn every failure into a node error with the MCP's wording. */
-async function apiGet(ctx: Ctx, i: number, base: string, path: string, params: IDataObject = {}) {
+async function apiGet(ctx: Ctx, i: number, path: string, params: IDataObject = {}) {
 	const qs = Object.fromEntries(
 		Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
 	);
@@ -266,7 +259,7 @@ async function apiGet(ctx: Ctx, i: number, base: string, path: string, params: I
 	try {
 		r = (await ctx.helpers.httpRequest({
 			method: 'GET',
-			url: base + path,
+			url: BASE + path,
 			qs,
 			headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
 			timeout: TIMEOUT_MS,
@@ -280,7 +273,7 @@ async function apiGet(ctx: Ctx, i: number, base: string, path: string, params: I
 			code === 'ECONNABORTED' || code === 'ETIMEDOUT' || /timeout/i.test(e?.message ?? '')
 				? `MatchAwards did not answer within ${TIMEOUT_MS / 1000} seconds. Retry once; if it fails again, ` +
 					'narrow the search (fewer NAICS codes, a shorter Posted Within Days) or try later.'
-				: `Could not reach MatchAwards at ${base} (${code || e?.name || 'Error'}). Check the network and retry later.`;
+				: `Could not reach MatchAwards at ${BASE} (${code || e?.name || 'Error'}). Check the network and retry later.`;
 		const err = new NodeOperationError(ctx.getNode(), message, { itemIndex: i });
 		err.message = message; // n8n swaps a message naming ECONNREFUSED etc. for generic text; keep ours
 		throw err;
@@ -312,39 +305,48 @@ async function apiGet(ctx: Ctx, i: number, base: string, path: string, params: I
 
 /** Collect up to `limit` unique rows. A sparse filter can return a short page with has_more, so
  * follow next_cursor with the same filters, for at most MAX_PAGES requests. */
-async function search(ctx: Ctx, i: number, base: string, params: IDataObject, limit: number) {
+async function search(ctx: Ctx, i: number, params: IDataObject, limit: number) {
 	const rows = new Map<string, IDataObject>();
 	let page: IDataObject | undefined;
 	let asOf: unknown;
 	let warning: string | undefined;
+	const fetchPage = async () => {
+		// Ask only for what is still missing, so no row is read past the cursor and then dropped.
+		const next = await apiGet(ctx, i, SEARCH_PATH, { ...params, limit: limit - rows.size });
+		if (!Array.isArray(next.results) || !next.results.every(isObject)) {
+			throw new NodeOperationError(
+				ctx.getNode(),
+				'MatchAwards returned an unexpected API response (results is not a list of objects).',
+				{ itemIndex: i },
+			);
+		}
+		return next;
+	};
 	for (let n = 0; n < MAX_PAGES; n++) {
 		let next: IDataObject;
-		let results: unknown;
-		try {
-			// Ask only for what is still missing, so no row is read past the cursor and then dropped.
-			next = await apiGet(ctx, i, base, SEARCH_PATH, { ...params, limit: limit - rows.size });
-			results = next.results;
-			if (!Array.isArray(results) || !results.every(isObject)) {
-				throw new NodeOperationError(
-					ctx.getNode(),
-					'MatchAwards returned an unexpected API response (results is not a list of objects).',
-					{ itemIndex: i },
-				);
+		if (!page) {
+			next = await fetchPage(); // first page: nothing to return, so a failure fails the call
+		} else {
+			try {
+				next = await fetchPage();
+			} catch (e) {
+				// Follow-up page: keep what we have; the last good page's next_cursor still points at the rest.
+				warning = `Stopped after ${rows.size} rows: ${e.message} More results may exist; call again with next_cursor.`;
+				break;
 			}
-		} catch (e) {
-			if (!page) throw e; // first page: nothing to return, so the call fails
-			// Follow-up page: keep what we have; the last good page's next_cursor still points at the rest.
-			warning = `Stopped after ${rows.size} rows: ${e.message} More results may exist; call again with next_cursor.`;
-			break;
 		}
 		page = next;
 		asOf = asOf || page.as_of;
-		for (const row of results as IDataObject[]) {
+		for (const row of page.results as IDataObject[]) {
 			const key = String(row.id);
 			if (!rows.has(key)) rows.set(key, row);
 		}
 		if (rows.size >= limit || !(page.has_more && page.next_cursor)) break;
 		params = { ...params, cursor: page.next_cursor };
+	}
+	if (!warning && rows.size < limit && page!.has_more && page!.next_cursor) {
+		// The page budget ran out on a sparse filter before Limit was filled.
+		warning = `Returned ${rows.size} of ${limit} rows after ${MAX_PAGES} requests. More results may exist; call again with next_cursor.`;
 	}
 	const out: IDataObject = {
 		as_of: asOf ?? null,
@@ -406,7 +408,7 @@ export class MatchAwards implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'MatchAwards',
 		name: 'matchAwards',
-		icon: 'file:matchawards.svg',
+		icon: { light: 'file:matchawards.svg', dark: 'file:matchawards.dark.svg' },
 		group: ['input'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
@@ -427,7 +429,6 @@ export class MatchAwards implements INodeType {
 				const resource = this.getNodeParameter('resource', i) as Resource;
 				const op = this.getNodeParameter('operation', i) as string;
 				const options = this.getNodeParameter('options', i, {}) as IDataObject;
-				const base = (String(options.apiBaseUrl || '').trim() || DEFAULT_BASE).replace(/\/+$/, '');
 
 				if (op === 'get') {
 					const id = String(this.getNodeParameter('id', i)).trim(); // ids exceed 2^53: always strings
@@ -438,7 +439,7 @@ export class MatchAwards implements INodeType {
 							{ itemIndex: i },
 						);
 					}
-					const data = await apiGet(this, i, base, `${SEARCH_PATH}/${id}`);
+					const data = await apiGet(this, i, `${SEARCH_PATH}/${id}`);
 					if (!isObject(data.result)) {
 						throw new NodeOperationError(
 							this.getNode(),
@@ -450,13 +451,13 @@ export class MatchAwards implements INodeType {
 					continue;
 				}
 
-				const limit = Number(this.getNodeParameter('limit', i, 20));
+				const limit = Number(this.getNodeParameter('limit', i, 50));
 				if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
 					throw new NodeOperationError(this.getNode(), 'Limit must be a whole number from 1 to 50.', {
 						itemIndex: i,
 					});
 				}
-				const page = await search(this, i, base, searchParams(this, i, resource), limit);
+				const page = await search(this, i, searchParams(this, i, resource), limit);
 				if (options.includePagingInfo) {
 					out.push({ json: page, pairedItem: { item: i } });
 					continue;
@@ -468,7 +469,10 @@ export class MatchAwards implements INodeType {
 					out.push({ json: { error: error.message }, pairedItem: { item: i } });
 					continue;
 				}
-				throw error;
+				// Keep a NodeApiError's HTTP context; NodeOperationError passes an existing one through unchanged.
+				const nodeError =
+					error instanceof NodeApiError ? error : new NodeOperationError(this.getNode(), error, { itemIndex: i });
+				throw nodeError;
 			}
 		}
 		return [out];

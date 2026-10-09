@@ -2,25 +2,50 @@
   "name": "n8n-nodes-matchawards",
   "version": "0.1.0",
   "description": "n8n node for MatchAwards: search US federal and state contract opportunities, grants and jobs.",
-  "keywords": ["n8n-community-node-package", "matchawards", "government contracts", "grants", "naics"],
+  "keywords": [
+    "n8n-community-node-package",
+    "matchawards",
+    "government contracts",
+    "grants",
+    "naics"
+  ],
   "license": "MIT",
   "homepage": "https://github.com/matchawards/n8n-nodes-matchawards",
-  "author": {"name": "MatchAwards"},
-  "repository": {"type": "git", "url": "git+https://github.com/matchawards/n8n-nodes-matchawards.git"},
+  "author": {
+    "name": "MatchAwards"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matchawards/n8n-nodes-matchawards.git"
+  },
   "scripts": {
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc && node -e \"require('fs').copyFileSync('nodes/MatchAwards/matchawards.svg','dist/nodes/MatchAwards/matchawards.svg')\"",
+    "build": "n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "release": "n8n-node release",
+    "prepublishOnly": "n8n-node prerelease",
     "test": "npm run build && node --test \"test/*.test.js\"",
     "smoke": "npm run build && node test/smoke.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": true,
     "credentials": [],
-    "nodes": ["dist/nodes/MatchAwards/MatchAwards.node.js"]
+    "nodes": [
+      "dist/nodes/MatchAwards/MatchAwards.node.js"
+    ]
   },
   "devDependencies": {
+    "@n8n/node-cli": "^0.46.4",
+    "eslint": "^9.39.5",
     "n8n-workflow": "^2.16.0",
+    "prettier": "^3.9.9",
+    "release-it": "^21.1.1",
     "typescript": "5.9.3"
   },
   "peerDependencies": {

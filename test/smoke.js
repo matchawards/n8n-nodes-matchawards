@@ -1,11 +1,12 @@
 // Live smoke against staging: Contract Search (NAICS 541511, limit 2), then Get of the first id.
-// Same fake-execute harness as the tests, with n8n's httpRequest replaced by fetch.
+// Same fake-execute harness as the tests, with n8n's httpRequest replaced by fetch. The node's host is fixed
+// to matchawards.com, so the smoke rewrites it to MATCHAWARDS_API_BASE here, outside the node.
 const { run } = require('./harness');
 
 const base = process.env.MATCHAWARDS_API_BASE || 'https://staging.matchawards.com';
 
 async function httpRequest(o) {
-	const url = new URL(o.url);
+	const url = new URL(o.url.replace(/^https:\/\/matchawards\.com/, base.replace(/\/+$/, '')));
 	for (const [k, v] of Object.entries(o.qs || {})) url.searchParams.set(k, String(v));
 	const r = await fetch(url, { method: o.method, headers: o.headers, signal: AbortSignal.timeout(o.timeout) });
 	const text = await r.text();
@@ -18,7 +19,7 @@ async function httpRequest(o) {
 }
 
 (async () => {
-	const options = { apiBaseUrl: base };
+	const options = {};
 	const s = await run({ httpRequest, params: { resource: 'contract', operation: 'search', naics: '541511', limit: 2, options } });
 	console.log(`search: ${s.out.length} items`, s.out.map((x) => ({ id: x.json.id, title: x.json.title })));
 	if (!s.out.length) throw new Error('search returned no rows');

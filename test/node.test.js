@@ -63,10 +63,10 @@ test('contract Level maps both -> contract, federal, state', async () => {
 	}
 });
 
-test('unset and empty filters are not sent; Limit defaults to 20', async () => {
+test('unset and empty filters are not sent; Limit defaults to 50', async () => {
 	const http = mock(page([]));
 	await run({ httpRequest: http, params: search('contract', { naics: '', filters: { state: '', keyword: '  ', cursor: '' } }) });
-	assert.deepEqual(http.calls[0].qs, { type: 'contract', limit: 20 });
+	assert.deepEqual(http.calls[0].qs, { type: 'contract', limit: 50 });
 });
 
 test('grant search: no state, open only when Include Closed', async () => {
@@ -75,13 +75,13 @@ test('grant search: no state, open only when Include Closed', async () => {
 		httpRequest: http,
 		params: search('grant', { naics: '541715', filters: { keyword: 'broadband', postedWithinDays: 90, includeClosed: true, state: 'VA' } }),
 	});
-	assert.deepEqual(http.calls[0].qs, { naics: '541715', q: 'broadband', type: 'grant', posted_within_days: 90, open: false, limit: 20 });
+	assert.deepEqual(http.calls[0].qs, { naics: '541715', q: 'broadband', type: 'grant', posted_within_days: 90, open: false, limit: 50 });
 });
 
 test('job search: posted_within_days defaults to 30, no open filter', async () => {
 	const http = mock(page([]));
 	await run({ httpRequest: http, params: search('job', { filters: { state: 'tx', keyword: 'electrician', includeClosed: true } }) });
-	assert.deepEqual(http.calls[0].qs, { q: 'electrician', type: 'job', state: 'TX', posted_within_days: 30, limit: 20 });
+	assert.deepEqual(http.calls[0].qs, { q: 'electrician', type: 'job', state: 'TX', posted_within_days: 30, limit: 50 });
 	const http2 = mock(page([]));
 	await run({ httpRequest: http2, params: search('job', { filters: { postedWithinDays: 7 } }) });
 	assert.equal(http2.calls[0].qs.posted_within_days, 7);
@@ -94,10 +94,13 @@ test('User-Agent is n8n-nodes-matchawards/<package version>', async () => {
 	assert.match(http.calls[0].headers['User-Agent'], /^n8n-nodes-matchawards\//);
 });
 
-test('API Base URL option overrides the base, trailing slash dropped', async () => {
+test('the host is fixed: no option points the node at another URL', async () => {
+	const { MatchAwards } = require('../dist/nodes/MatchAwards/MatchAwards.node.js');
+	const names = JSON.stringify(new MatchAwards().description.properties);
+	assert.doesNotMatch(names, /apiBaseUrl|Base URL/);
 	const http = mock(page([]));
-	await run({ httpRequest: http, params: search('contract', { options: { apiBaseUrl: 'https://staging.matchawards.com/' } }) });
-	assert.equal(http.calls[0].url, 'https://staging.matchawards.com/api/public/v1/opportunities');
+	await run({ httpRequest: http, params: search('contract', { options: { apiBaseUrl: 'https://evil.example' } }) });
+	assert.equal(http.calls[0].url, BASE);
 });
 
 test('zero results -> zero items', async () => {
@@ -146,7 +149,21 @@ test('follows next_cursor for at most 3 requests, dedupes by id, asks only for w
 	assert.equal(out.length, 1);
 	assert.deepEqual(out[0].json, {
 		as_of: 'first', results: ['1', '2', '3', '4'].map(row), has_more: true, next_cursor: 'c3',
+		warning: 'Returned 4 of 10 rows after 3 requests. More results may exist; call again with next_cursor.',
 	});
+});
+
+test('an under-filled search that ran out of requests says so as a hint', async () => {
+	const pages = () => [
+		page(['1'], { has_more: true, next_cursor: 'c1' }),
+		page(['2'], { has_more: true, next_cursor: 'c2' }),
+		page(['3'], { has_more: true, next_cursor: 'c3' }),
+	];
+	const { out, hints } = await run({ httpRequest: mock(...pages()), params: search('contract', { limit: 10 }) });
+	assert.deepEqual(out.map((x) => x.json.id), ['1', '2', '3']);
+	assert.deepEqual(hints, [{ type: 'warning', message: 'Returned 3 of 10 rows after 3 requests. More results may exist; call again with next_cursor.' }]);
+	// Exhausted (has_more false) or filled: no hint.
+	assert.equal((await run({ httpRequest: mock(page(['1'])), params: search('contract', { limit: 10 }) })).hints.length, 0);
 });
 
 test('stops once Limit is filled or has_more is false', async () => {
