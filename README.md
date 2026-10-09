@@ -13,6 +13,8 @@ same filters, validation, paging and error messages.
 In n8n: **Settings → Community Nodes → Install**, enter `n8n-nodes-matchawards`, confirm. The **MatchAwards**
 node then shows up in the node panel. It can also be used as a tool by an n8n AI Agent.
 
+Self-hosted without the UI: `cd ~/.n8n/nodes && npm install n8n-nodes-matchawards`, then restart n8n.
+
 ## Resources and operations
 
 | Resource | Operation | Fields | Covers MCP tool |
