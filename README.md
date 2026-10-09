@@ -19,7 +19,7 @@ Self-hosted without the UI: `cd ~/.n8n/nodes && npm install n8n-nodes-matchaward
 
 None. The public MatchAwards API needs no account and no API key.
 
-## Resources and operations
+## Operations
 
 | Resource | Operation | Fields | Covers MCP tool |
 |---|---|---|---|
