@@ -1,2 +1,5 @@
 node_modules
 dist
+demo/videos
+demo/shots
+demo/node_modules
